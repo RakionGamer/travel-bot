@@ -1,0 +1,205 @@
+import { bot } from "../../../lib/telegram";
+import { getRates } from "../../../lib/fetchRates";
+import { createImageWithRatesVenezuela } from "../../../lib/processorVenezuela";
+import { createImageWithRatesPeru } from "../../../lib/processorPeru";
+import { createImageWithRatesChile } from "../../../lib/processorChile";
+import { createImageWithRatesArgentina } from "../../../lib/processorArgentina";
+import { createImageWithRatesBrasil } from "../../../lib/processorBrasil";
+import { createImageWithRatesColombia } from "../../../lib/processorColombia";
+import { createImageWithRatesEfectivo } from "../../../lib/processorEfectivo";
+import { createImageWithRatesEEUU } from "../../../lib/processorEEUU";
+import { createImageWithRatesEspana } from "../../../lib/processorEspana";
+import { createImageWithRatesParaguay } from "../../../lib/processorParaguay";
+import { createImageWithRatesEcuador } from "../../../lib/processorEcuador";
+import { createImageWithRatesRemesasVenezuela } from "../../../lib/RemesasVenezuela";
+
+// Modo de prueba: configurado en true para ejecutar únicamente Venezuela
+const TEST_MODE = false;
+
+const ALL_IMAGE_PROCESSORS = [
+  { key: 'remesasVenezuela', processor: createImageWithRatesRemesasVenezuela },
+  { key: 'chile', processor: createImageWithRatesChile },
+  { key: 'peru', processor: createImageWithRatesPeru },
+  { key: 'argentina', processor: createImageWithRatesArgentina },
+  { key: 'colombia', processor: createImageWithRatesColombia },
+  { key: 'brasil', processor: createImageWithRatesBrasil },
+  { key: 'eeuu', processor: createImageWithRatesEEUU },
+  { key: 'espana', processor: createImageWithRatesEspana },
+  { key: 'paraguay', processor: createImageWithRatesParaguay },
+  { key: 'ecuador', processor: createImageWithRatesEcuador },
+  { key: 'venezuela', processor: createImageWithRatesVenezuela },
+  { key: 'efectivo', processor: createImageWithRatesEfectivo },
+];
+
+const IMAGE_PROCESSORS = TEST_MODE
+  ? [{ key: 'venezuela', processor: createImageWithRatesVenezuela }]
+  : ALL_IMAGE_PROCESSORS;
+
+const PERSISTENT_KEYBOARD = {
+  reply_markup: {
+    keyboard: [
+      [
+        { text: "Generar Tasas💸" }
+      ]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  },
+};
+
+const UPDATE_BUTTON = {
+  reply_markup: {
+    inline_keyboard: [
+      [
+        {
+          text: "Actualizar Tasas🔄",
+          callback_data: "update_all",
+        },
+      ],
+    ],
+  },
+};
+
+async function handleGenerateImages(chatId) {
+  try {
+    const processingMsg = await bot.sendMessage(
+      chatId,
+      "⏳ Procesando imágenes... Esto durará solo unos segundos"
+    );
+
+    const rawRates = await getRates();
+
+    if (!rawRates) {
+      await bot.editMessageText("No encontré tasas disponibles en este momento", {
+        chat_id: chatId,
+        message_id: processingMsg.message_id,
+      });
+      return;
+    }
+
+    const rates = {
+      ecuador: rawRates["EEUU"], // Ecuador usa USD → mismas tasas que EEUU
+      mexico: rawRates["Mexico"],
+      venezuela: rawRates["Venezuela"],
+      remesasVenezuela: rawRates["Venezuela"],
+      peru: rawRates["Peru"],
+      chile: rawRates["Chile"],
+      argentina: rawRates["Argentina"],
+      brasil: rawRates["Brasil"],
+      colombia: rawRates["Colombia"],
+      eeuu: rawRates["EEUU"],
+      espana: rawRates["España"],
+      paraguay: rawRates["Paraguay"],
+      efectivo: rawRates["Efectivo"],
+    };
+
+    if (Object.values(rates).every(val => !val || Object.keys(val).length === 0)) {
+      await bot.editMessageText("No encontré tasas disponibles en este momento", {
+        chat_id: chatId,
+        message_id: processingMsg.message_id,
+      });
+      return;
+    }
+
+    const imagePromises = IMAGE_PROCESSORS
+      .filter(({ key }) => rates[key] && Object.keys(rates[key]).length > 0)
+      .map(async ({ key, processor }) => {
+        try {
+          const buffer = await processor(rates[key]);
+          return { buffer, key };
+        } catch (error) {
+          console.error(`Error procesando ${key}:`, error);
+          return null;
+        }
+      });
+
+    const images = (await Promise.all(imagePromises)).filter(Boolean);
+
+    if (images.length === 0) {
+      await bot.sendMessage(
+        chatId,
+        "No se pudieron generar imágenes en este momento",
+        PERSISTENT_KEYBOARD
+      );
+      return;
+    }
+
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const isLast = i === images.length - 1;
+
+      await bot.sendPhoto(chatId, img.buffer, {
+        caption: img.caption,
+        reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
+      });
+    }
+  } catch (error) {
+    console.error("Error en handleGenerateImages:", error);
+    try {
+      await bot.sendMessage(chatId, "Ocurrió un error al generar las imágenes. Por favor intenta de nuevo.");
+    } catch (_) { }
+  }
+}
+
+export async function POST(req) {
+  try {
+    const update = await req.json();
+
+    const chatId =
+      update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+    const rawText = (update.message?.text || "").trim();
+    const text = rawText.toLowerCase();
+    const callbackData = update.callback_query?.data;
+
+    console.log(`📩 [Telegram Update] chatId: ${chatId} | texto: "${rawText}" | callback: ${callbackData || 'ninguno'}`);
+
+    if (update.callback_query) {
+      await bot.answerCallbackQuery(update.callback_query.id);
+    }
+
+    const WELCOME_MESSAGE = `🤖 ¡Hola! Soy TravelBot, tu bot generador de imágenes.
+
+📋 ¿Cómo usarme?
+
+1️⃣ Presiona "Generar Tasas💸" para procesar las imágenes
+2️⃣ Usa el botón "🔄 Actualizar Tasas" cuando necesites tasas nuevas
+
+¡Comencemos! 👇`;
+
+    if (text === "/start" || text === "start") {
+      await bot.sendMessage(chatId, WELCOME_MESSAGE, PERSISTENT_KEYBOARD);
+      return new Response("ok", { status: 200 });
+    }
+
+    // Manejo de generación de imágenes
+    if (callbackData === "update_all" || text === "generar tasas💸") {
+      // Respondemos 200 OK inmediatamente a Telegram para evitar timeout (502 / reintentos infinitos)
+      handleGenerateImages(chatId);
+      return new Response("ok", { status: 200 });
+    }
+
+    return new Response("ok", { status: 200 });
+  } catch (err) {
+    console.error(err);
+    return new Response("ok", { status: 200 });
+  }
+}
+
+export async function GET() {
+  const rates = await getRates();
+  return new Response(
+    JSON.stringify(
+      {
+        message: "API Bot funcionando",
+        timestamp: new Date().toISOString(),
+        rates,
+      },
+      null,
+      2
+    ),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }
+  );
+}

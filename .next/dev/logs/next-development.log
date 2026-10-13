@@ -1,0 +1,11 @@
+{"timestamp":"00:00:17.146","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:17:49.147","source":"Server","level":"LOG","message":"  Reload env: .env"}
+{"timestamp":"00:18:01.647","source":"Server","level":"LOG","message":"📩 [Telegram Update] chatId: 1572396288 | texto: \"Generar Tasas💸\" | callback: ninguno"}
+{"timestamp":"00:18:01.677","source":"Server","level":"ERROR","message":"(node:27440) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)"}
+{"timestamp":"00:18:12.362","source":"Server","level":"ERROR","message":"(node:27440) [node-telegram-bot-api] DeprecationWarning: Buffers will have their filenames default to \"filename\" instead of \"data\". See https://github.com/yagop/node-telegram-bot-api/blob/master/doc/usage.md#sending-files for more information on how sending files has been improved and on how to disable this deprecation message altogether."}
+{"timestamp":"00:21:28.065","source":"Server","level":"LOG","message":"📩 [Telegram Update] chatId: 1572396288 | texto: \"Generar Tasas💸\" | callback: ninguno"}
+{"timestamp":"00:24:30.724","source":"Server","level":"LOG","message":"📩 [Telegram Update] chatId: 1572396288 | texto: \"/start\" | callback: ninguno"}
+{"timestamp":"00:24:33.146","source":"Server","level":"LOG","message":"📩 [Telegram Update] chatId: 1572396288 | texto: \"Generar Tasas💸\" | callback: ninguno"}
+{"timestamp":"00:25:40.580","source":"Server","level":"ERROR","message":"Error en handleGenerateImages: Error: EFATAL: Error: read ECONNRESET"}
+{"timestamp":"00:33:10.845","source":"Server","level":"LOG","message":"  Reload env: .env"}
+{"timestamp":"00:33:35.272","source":"Server","level":"LOG","message":"📩 [Telegram Update] chatId: 1572396288 | texto: \"Generar Tasas💸\" | callback: ninguno"}
