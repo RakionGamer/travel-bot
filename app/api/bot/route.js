@@ -12,6 +12,7 @@ import { createImageWithRatesEspana } from "../../../lib/processorEspana";
 import { createImageWithRatesParaguay } from "../../../lib/processorParaguay";
 import { createImageWithRatesEcuador } from "../../../lib/processorEcuador";
 import { createImageWithRatesRemesasVenezuela } from "../../../lib/RemesasVenezuela";
+import { createImageWithRatesMexico } from "../../../lib/processorMexico";
 
 export const maxDuration = 60; // Permite hasta 60 segundos de ejecución en Vercel
 
@@ -28,6 +29,7 @@ const ALL_IMAGE_PROCESSORS = [
   { key: 'eeuu', processor: createImageWithRatesEEUU },
   { key: 'espana', processor: createImageWithRatesEspana },
   { key: 'paraguay', processor: createImageWithRatesParaguay },
+  { key: 'mexico', processor: createImageWithRatesMexico },
   { key: 'ecuador', processor: createImageWithRatesEcuador },
   { key: 'venezuela', processor: createImageWithRatesVenezuela },
   { key: 'efectivo', processor: createImageWithRatesEfectivo },
