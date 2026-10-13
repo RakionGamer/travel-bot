@@ -176,13 +176,48 @@ export async function POST(req) {
 
 ¡Comencemos! 👇`;
 
+    const INLINE_START_BUTTON = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Generar Tasas 💸",
+              callback_data: "generate_rates",
+            },
+          ],
+        ],
+      },
+    };
+
     if (text === "/start" || text === "start") {
-      await bot.sendMessage(chatId, WELCOME_MESSAGE, PERSISTENT_KEYBOARD);
+      // Enviamos el mensaje con el botón inline Y registramos el teclado inferior persistente
+      await bot.sendMessage(chatId, WELCOME_MESSAGE, {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Generar Tasas 💸", callback_data: "generate_rates" }]
+          ],
+        }
+      });
+      // Aseguramos el teclado inferior por si su Telegram lo soporta
+      await bot.sendMessage(chatId, "O presiona el botón inferior 👇", PERSISTENT_KEYBOARD);
       return new Response("ok", { status: 200 });
     }
 
-    // Manejo de generación de imágenes
-    if (callbackData === "update_all" || text === "generar tasas💸") {
+    // Normalizar texto para aceptar "generar tasas", "generar tasa", "tasas", con o sin emoji
+    const cleanText = text.replace(/[^a-z0-9]/g, "");
+    const isGenerateText =
+      cleanText.includes("generartasa") ||
+      cleanText.includes("generartasas") ||
+      cleanText === "tasas" ||
+      cleanText === "tasa";
+
+    // Manejo de generación de imágenes (acepta callback_data o texto escrito)
+    if (
+      callbackData === "update_all" ||
+      callbackData === "generate_rates" ||
+      text === "generar tasas💸" ||
+      isGenerateText
+    ) {
       await handleGenerateImages(chatId);
       return new Response("ok", { status: 200 });
     }
