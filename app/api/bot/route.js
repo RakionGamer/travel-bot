@@ -85,7 +85,7 @@ async function handleGenerateImages(chatId) {
       ecuador: rawRates["EEUU"], // Ecuador usa USD → mismas tasas que EEUU
       mexico: rawRates["Mexico"],
       venezuela: rawRates["Venezuela"],
-      remesasVenezuela: rawRates["Venezuela"],
+      remesasVenezuela: rawRates["RemesasVenezuela"],
       peru: rawRates["Peru"],
       chile: rawRates["Chile"],
       argentina: rawRates["Argentina"],
