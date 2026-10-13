@@ -13,6 +13,8 @@ import { createImageWithRatesParaguay } from "../../../lib/processorParaguay";
 import { createImageWithRatesEcuador } from "../../../lib/processorEcuador";
 import { createImageWithRatesRemesasVenezuela } from "../../../lib/RemesasVenezuela";
 
+export const maxDuration = 60; // Permite hasta 60 segundos de ejecución en Vercel
+
 // Modo de prueba: configurado en true para ejecutar únicamente Venezuela
 const TEST_MODE = false;
 
@@ -101,42 +103,50 @@ async function handleGenerateImages(chatId) {
       return;
     }
 
-    const imagePromises = IMAGE_PROCESSORS
-      .filter(({ key }) => rates[key] && Object.keys(rates[key]).length > 0)
-      .map(async ({ key, processor }) => {
-        try {
-          const buffer = await processor(rates[key]);
-          return { buffer, key };
-        } catch (error) {
-          console.error(`Error procesando ${key}:`, error);
-          return null;
-        }
-      });
+    const processorsToRun = IMAGE_PROCESSORS.filter(
+      ({ key }) => rates[key] && Object.keys(rates[key]).length > 0
+    );
 
-    const images = (await Promise.all(imagePromises)).filter(Boolean);
+    let sentCount = 0;
+    const errors = [];
 
-    if (images.length === 0) {
+    for (let i = 0; i < processorsToRun.length; i++) {
+      const { key, processor } = processorsToRun[i];
+      try {
+        const buffer = await processor(rates[key]);
+        const isLast = i === processorsToRun.length - 1;
+
+        await bot.sendPhoto(
+          chatId,
+          buffer,
+          {
+            reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
+          },
+          {
+            filename: `${key}.png`,
+            contentType: "image/png",
+          }
+        );
+        sentCount++;
+      } catch (err) {
+        console.error(`Error procesando o enviando ${key}:`, err);
+        errors.push(`${key}: ${err.message || err}`);
+      }
+    }
+
+    if (sentCount === 0) {
+      const errorDetail = errors.length > 0 ? `\nDetalle: ${errors.slice(0, 3).join(", ")}` : "";
       await bot.sendMessage(
         chatId,
-        "No se pudieron generar imágenes en este momento",
+        `No se pudieron generar imágenes en este momento.${errorDetail}`,
         PERSISTENT_KEYBOARD
       );
       return;
     }
-
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const isLast = i === images.length - 1;
-
-      await bot.sendPhoto(chatId, img.buffer, {
-        caption: img.caption,
-        reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
-      });
-    }
   } catch (error) {
     console.error("Error en handleGenerateImages:", error);
     try {
-      await bot.sendMessage(chatId, "Ocurrió un error al generar las imágenes. Por favor intenta de nuevo.");
+      await bot.sendMessage(chatId, `Ocurrió un error: ${error.message || error}`);
     } catch (_) { }
   }
 }
@@ -173,8 +183,7 @@ export async function POST(req) {
 
     // Manejo de generación de imágenes
     if (callbackData === "update_all" || text === "generar tasas💸") {
-      // Respondemos 200 OK inmediatamente a Telegram para evitar timeout (502 / reintentos infinitos)
-      handleGenerateImages(chatId);
+      await handleGenerateImages(chatId);
       return new Response("ok", { status: 200 });
     }
 
