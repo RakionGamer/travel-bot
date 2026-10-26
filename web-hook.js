@@ -10,7 +10,8 @@ if (webhookUrl && !webhookUrl.includes('/api/bot')) {
 
 async function configureWebhook() {
   try {
-    await bot.setWebHook(webhookUrl);
+    // drop_pending_updates: true limpia la cola de mensajes acumulados/reintentos
+    await bot.setWebHook(webhookUrl, { drop_pending_updates: true });
     console.log('✅ Webhook configurado exitosamente en:', webhookUrl);
 
     const info = await bot.getWebHookInfo();

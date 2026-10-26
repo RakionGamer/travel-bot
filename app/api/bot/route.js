@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { bot } from "../../../lib/telegram";
 import { getRates } from "../../../lib/fetchRates";
 import { createImageWithRatesVenezuela } from "../../../lib/processorVenezuela";
@@ -18,6 +19,9 @@ export const maxDuration = 60; // Permite hasta 60 segundos de ejecución en Ver
 
 // Modo de prueba: configurado en true para ejecutar únicamente Venezuela
 const TEST_MODE = false;
+
+// Registro en memoria de updates procesados para ignorar duplicados de Telegram
+const processedUpdates = new Set();
 
 const ALL_IMAGE_PROCESSORS = [
   { key: 'remesasVenezuela', processor: createImageWithRatesRemesasVenezuela },
@@ -162,6 +166,19 @@ export async function POST(req) {
   try {
     const update = await req.json();
 
+    // Filtro contra actualizaciones duplicadas de Telegram
+    if (update.update_id) {
+      if (processedUpdates.has(update.update_id)) {
+        console.log(`⚠️ Update ${update.update_id} ya procesado previamente. Ignorando.`);
+        return new Response("ok", { status: 200 });
+      }
+      processedUpdates.add(update.update_id);
+      if (processedUpdates.size > 500) {
+        const first = processedUpdates.values().next().value;
+        processedUpdates.delete(first);
+      }
+    }
+
     const chatId =
       update.message?.chat?.id || update.callback_query?.message?.chat?.id;
 
@@ -175,12 +192,11 @@ export async function POST(req) {
 
     console.log(`📩 [Telegram Update] chatId: ${chatId} | texto: "${rawText}" | callback: ${callbackData || 'ninguno'}`);
 
+    // Responder de inmediato al callback_query sin bloquear
     if (update.callback_query) {
-      try {
-        await bot.answerCallbackQuery(update.callback_query.id);
-      } catch (e) {
-        console.warn("No se pudo responder al callback query:", e.message);
-      }
+      bot.answerCallbackQuery(update.callback_query.id).catch((e) => {
+        console.warn("Aviso al responder callback query:", e.message);
+      });
     }
 
     const WELCOME_MESSAGE = `🤖 ¡Hola! Soy TravelBot, tu bot generador de imágenes.
@@ -193,20 +209,25 @@ export async function POST(req) {
 ¡Comencemos! 👇`;
 
     if (text === "/start" || text === "start") {
-      // Enviamos el mensaje con el botón inline Y registramos el teclado inferior persistente
-      await bot.sendMessage(chatId, WELCOME_MESSAGE, {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Generar Tasas 💸", callback_data: "generate_rates" }]
-          ],
+      after(async () => {
+        try {
+          await bot.sendMessage(chatId, WELCOME_MESSAGE, {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: "Generar Tasas 💸", callback_data: "generate_rates" }]
+              ],
+            }
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          await bot.sendMessage(chatId, "O presiona el botón inferior 👇", PERSISTENT_KEYBOARD);
+        } catch (err) {
+          console.error("Error en /start:", err);
         }
       });
 
-      // Pausa de 500ms para evitar colisión de rate limit en Telegram
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Aseguramos el teclado inferior por si su Telegram lo soporta
-      await bot.sendMessage(chatId, "O presiona el botón inferior 👇", PERSISTENT_KEYBOARD);
+      // Retornar 200 OK inmediatamente a Telegram
       return new Response("ok", { status: 200 });
     }
 
@@ -225,7 +246,17 @@ export async function POST(req) {
       text === "generar tasas💸" ||
       isGenerateText
     ) {
-      await handleGenerateImages(chatId);
+      // Usamos after() de Next.js para ejecutar la generación pesada en segundo plano
+      // sin bloquear la respuesta HTTP a Telegram (evitando 'Read timeout expired')
+      after(async () => {
+        try {
+          await handleGenerateImages(chatId);
+        } catch (err) {
+          console.error("Error en generación en segundo plano:", err);
+        }
+      });
+
+      // Responder 200 OK inmediatamente a Telegram (< 50ms)
       return new Response("ok", { status: 200 });
     }
 
