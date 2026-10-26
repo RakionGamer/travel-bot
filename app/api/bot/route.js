@@ -113,39 +113,29 @@ async function handleGenerateImages(chatId) {
       ({ key }) => rates[key] && Object.keys(rates[key]).length > 0
     );
 
-    let sentCount = 0;
+    const mediaItems = [];
     const errors = [];
 
-    for (let i = 0; i < processorsToRun.length; i++) {
-      const { key, processor } = processorsToRun[i];
+    // Generar todas las imágenes en buffers
+    for (const { key, processor } of processorsToRun) {
       try {
         const buffer = await processor(rates[key]);
-        const isLast = i === processorsToRun.length - 1;
-
-        await bot.sendPhoto(
-          chatId,
-          buffer,
-          {
-            reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
-          },
-          {
+        mediaItems.push({
+          key,
+          type: "photo",
+          media: buffer,
+          fileOptions: {
             filename: `${key}.png`,
             contentType: "image/png",
-          }
-        );
-        sentCount++;
-
-        // Pequeña pausa preventiva (800ms) para respetar el límite de 1 mensaje/seg de Telegram
-        if (!isLast) {
-          await new Promise((resolve) => setTimeout(resolve, 800));
-        }
+          },
+        });
       } catch (err) {
-        console.error(`Error procesando o enviando ${key}:`, err);
+        console.error(`Error procesando ${key}:`, err);
         errors.push(`${key}: ${err.message || err}`);
       }
     }
 
-    if (sentCount === 0) {
+    if (mediaItems.length === 0) {
       const errorDetail = errors.length > 0 ? `\nDetalle: ${errors.slice(0, 3).join(", ")}` : "";
       await bot.sendMessage(
         chatId,
@@ -153,6 +143,51 @@ async function handleGenerateImages(chatId) {
         PERSISTENT_KEYBOARD
       );
       return;
+    }
+
+    // Enviar en álbumes de hasta 7 fotos con sendMediaGroup
+    // Reduce drásticamente 13 mensajes individuales a solo 2 álbumes
+    try {
+      const CHUNK_SIZE = 7;
+      for (let i = 0; i < mediaItems.length; i += CHUNK_SIZE) {
+        const chunk = mediaItems.slice(i, i + CHUNK_SIZE).map((item) => ({
+          type: "photo",
+          media: item.media,
+          fileOptions: item.fileOptions,
+        }));
+
+        await bot.sendMediaGroup(chatId, chunk);
+
+        if (i + CHUNK_SIZE < mediaItems.length) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      // Mensaje final con el botón de actualización
+      await bot.sendMessage(
+        chatId,
+        "✅ Tasas generadas exitosamente. Usa el botón inferior para actualizar cuando desees:",
+        UPDATE_BUTTON
+      );
+    } catch (mediaGroupErr) {
+      console.warn("Fallo sendMediaGroup, recurriendo a envío individual:", mediaGroupErr.message);
+
+      // Fallback a envío individual si sendMediaGroup presenta problemas
+      for (let i = 0; i < mediaItems.length; i++) {
+        const item = mediaItems[i];
+        const isLast = i === mediaItems.length - 1;
+        await bot.sendPhoto(
+          chatId,
+          item.media,
+          {
+            reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
+          },
+          item.fileOptions
+        );
+        if (!isLast) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
     }
   } catch (error) {
     console.error("Error en handleGenerateImages:", error);
