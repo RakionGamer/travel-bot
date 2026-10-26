@@ -130,6 +130,11 @@ async function handleGenerateImages(chatId) {
           }
         );
         sentCount++;
+
+        // Pequeña pausa preventiva (800ms) para respetar el límite de 1 mensaje/seg de Telegram
+        if (!isLast) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
       } catch (err) {
         console.error(`Error procesando o enviando ${key}:`, err);
         errors.push(`${key}: ${err.message || err}`);
@@ -159,6 +164,11 @@ export async function POST(req) {
 
     const chatId =
       update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+
+    if (!chatId) {
+      return new Response("ok", { status: 200 });
+    }
+
     const rawText = (update.message?.text || "").trim();
     const text = rawText.toLowerCase();
     const callbackData = update.callback_query?.data;
@@ -166,7 +176,11 @@ export async function POST(req) {
     console.log(`📩 [Telegram Update] chatId: ${chatId} | texto: "${rawText}" | callback: ${callbackData || 'ninguno'}`);
 
     if (update.callback_query) {
-      await bot.answerCallbackQuery(update.callback_query.id);
+      try {
+        await bot.answerCallbackQuery(update.callback_query.id);
+      } catch (e) {
+        console.warn("No se pudo responder al callback query:", e.message);
+      }
     }
 
     const WELCOME_MESSAGE = `🤖 ¡Hola! Soy TravelBot, tu bot generador de imágenes.
@@ -178,19 +192,6 @@ export async function POST(req) {
 
 ¡Comencemos! 👇`;
 
-    const INLINE_START_BUTTON = {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: "Generar Tasas 💸",
-              callback_data: "generate_rates",
-            },
-          ],
-        ],
-      },
-    };
-
     if (text === "/start" || text === "start") {
       // Enviamos el mensaje con el botón inline Y registramos el teclado inferior persistente
       await bot.sendMessage(chatId, WELCOME_MESSAGE, {
@@ -200,6 +201,10 @@ export async function POST(req) {
           ],
         }
       });
+
+      // Pausa de 500ms para evitar colisión de rate limit en Telegram
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       // Aseguramos el teclado inferior por si su Telegram lo soporta
       await bot.sendMessage(chatId, "O presiona el botón inferior 👇", PERSISTENT_KEYBOARD);
       return new Response("ok", { status: 200 });
